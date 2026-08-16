@@ -1,0 +1,29 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+  functions = "netlify/functions"
+
+[functions]
+  node_bundler = "esbuild"
+
+# Biar frontend manggil "/api/auth", "/api/sheets", "/api/price"
+# (lebih rapi) daripada path asli "/.netlify/functions/..."
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
+# SPA fallback - biar refresh di /journal, /dashboard, dll tidak 404
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Saat "netlify dev" dijalankan: proxy ke Vite dev server (port 5173),
+# forward /api/* ke functions secara otomatis.
+[dev]
+  command = "npm run dev"
+  targetPort = 5173
+  port = 8888
+  publish = "dist"
+  autoLaunch = false
