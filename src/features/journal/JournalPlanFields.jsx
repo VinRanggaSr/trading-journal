@@ -17,7 +17,7 @@ export function JournalPlanFields({ form, setForm, checklistConfig, checkedItems
           />
         </div>
         <div>
-          <Label htmlFor="planPrice">Harga Sekarang</Label>
+          <Label htmlFor="planPrice">Harga Rencana/Plan</Label>
           <Input
             id="planPrice"
             type="number"
