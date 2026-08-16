@@ -25,7 +25,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose = () => {} }) {
       <aside
         className={cn(
           'fixed inset-y-0 left-0 z-50 flex h-screen w-64 shrink-0 flex-col border-r border-border bg-bg px-3 py-6 transition-transform duration-200 ease-out',
-          'lg:static lg:z-auto lg:w-60 lg:translate-x-0',
+          'lg:w-60 lg:translate-x-0',
           mobileOpen ? 'translate-x-0' : '-translate-x-full'
         )}
       >
