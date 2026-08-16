@@ -8,6 +8,9 @@ import { Input, Label } from '../components/ui/input';
 import { Textarea } from '../components/ui/textarea';
 import { RichTextEditor } from '../features/stock-analysis/RichTextEditor';
 import { TagInput } from '../features/stock-analysis/TagInput';
+import { StockChart } from '../features/stock-analysis/StockChart';
+import { Card, CardContent } from '../components/ui/card';
+import { cn } from '../lib/utils';
 
 const emptyForm = { ticker: '', fundamental: '', technical: '', moneyFlow: '', otherNotes: '', tags: '' };
 
@@ -19,6 +22,7 @@ export function AnalysisDetailPage() {
 
   const [form, setForm] = useState(isNew ? emptyForm : null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [activeTab, setActiveTab] = useState('notes');
   const loadedIdRef = useRef(isNew ? 'new' : null);
 
   const { data: analyses = [], isLoading } = useQuery({
@@ -108,6 +112,31 @@ export function AnalysisDetailPage() {
 
   const saveMutation = isNew ? createMutation : updateMutation;
 
+  const tabsBar = (
+    <div className="flex w-full items-center gap-1 rounded-xl bg-[#EFEFF1] p-1">
+      <button
+        type="button"
+        onClick={() => setActiveTab('notes')}
+        className={cn(
+          'flex-1 rounded-[10px] px-4 py-1.5 text-sm font-medium transition-colors',
+          activeTab === 'notes' ? 'bg-white text-ink shadow-sm' : 'text-ink-muted hover:text-ink'
+        )}
+      >
+        Analysis
+      </button>
+      <button
+        type="button"
+        onClick={() => setActiveTab('chart')}
+        className={cn(
+          'flex-1 rounded-[10px] px-4 py-1.5 text-sm font-medium transition-colors',
+          activeTab === 'chart' ? 'bg-white text-ink shadow-sm' : 'text-ink-muted hover:text-ink'
+        )}
+      >
+        Chart
+      </button>
+    </div>
+  );
+
   return (
     <div>
       <Link to="/analysis" className="inline-flex items-center gap-1.5 text-sm text-ink-muted hover:text-ink">
@@ -175,12 +204,22 @@ export function AnalysisDetailPage() {
         <form id="analysisForm" onSubmit={handleSubmit} className="mt-6">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
             <div className="min-w-0 flex-1">
-              <RichTextEditor
-                key={analysisId}
-                content={form.otherNotes}
-                onChange={(html) => setForm((f) => ({ ...f, otherNotes: html }))}
-                placeholder="Masukan hasil analisis anda"
-              />
+              {activeTab === 'chart' ? (
+                <Card>
+                  <div className="p-2 pb-0">{tabsBar}</div>
+                  <CardContent className="p-3">
+                    <StockChart ticker={form.ticker} />
+                  </CardContent>
+                </Card>
+              ) : (
+                <RichTextEditor
+                  key={analysisId}
+                  content={form.otherNotes}
+                  onChange={(html) => setForm((f) => ({ ...f, otherNotes: html }))}
+                  placeholder="Masukan hasil analisis anda"
+                  tabs={tabsBar}
+                />
+              )}
             </div>
 
             <div className="order-first w-full shrink-0 space-y-4 bg-bg lg:order-none lg:w-[300px] lg:sticky lg:top-6 lg:self-start">

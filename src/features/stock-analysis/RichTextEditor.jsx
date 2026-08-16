@@ -58,7 +58,7 @@ function ToolbarDivider() {
   return <div className="mx-1 h-5 w-px shrink-0 bg-border" />;
 }
 
-export function RichTextEditor({ content, onChange, placeholder, className }) {
+export function RichTextEditor({ content, onChange, placeholder, className, tabs }) {
   const editor = useEditor({
     extensions: [
       StarterKit,
@@ -83,6 +83,7 @@ export function RichTextEditor({ content, onChange, placeholder, className }) {
   return (
     <div className={cn('rounded-2xl border border-border bg-white shadow-card', className)}>
       <div className="sticky top-0 z-10 rounded-t-2xl bg-white">
+      {tabs && <div className="p-2 pb-0">{tabs}</div>}
       <div className="flex flex-wrap items-center gap-1 border-b border-border px-2 py-1.5">
         <ToolbarButton
           title="Bold"
