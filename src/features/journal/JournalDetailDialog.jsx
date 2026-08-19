@@ -9,10 +9,22 @@ import { Textarea } from '../../components/ui/textarea';
 import { Checkbox } from '../../components/ui/checkbox';
 import { StatusBadge } from './StatusBadge';
 import { LivePrice } from './LivePrice';
+import { useNominalVisibility } from '../../context/NominalVisibilityContext';
+import { cn } from '../../lib/utils';
 
 function formatIDR(n) {
   if (n === '' || n === null || n === undefined || Number.isNaN(Number(n))) return '-';
   return new Intl.NumberFormat('id-ID').format(n);
+}
+
+function nominalToPercent(nominal, total) {
+  if (!total || total <= 0) return 0;
+  return Math.round((Number(nominal || 0) / total) * 10000) / 100;
+}
+
+function formatPercent(n) {
+  const num = Number(n || 0);
+  return (Math.round(num * 100) / 100).toString();
 }
 
 function formatDate(iso) {
@@ -31,12 +43,21 @@ const emptyEditForm = { ticker: '', planPrice: '', tp: '', cl: '', riskReward: '
 
 export function JournalDetailDialog({ journalId, open, onOpenChange }) {
   const queryClient = useQueryClient();
+  const { hidden } = useNominalVisibility();
   const [activeAction, setActiveAction] = useState(null); // null | 'entry' | 'tp' | 'tp-partial' | 'cl'
-  const [actionForm, setActionForm] = useState({ price: '', nominal: '', percent: '' });
+  const [actionForm, setActionForm] = useState({ price: '', nominal: '', percent: '', nominalSold: '' });
+  const [partialMode, setPartialMode] = useState('percent'); // 'percent' | 'nominal'
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [editForm, setEditForm] = useState(emptyEditForm);
   const [editCheckedItems, setEditCheckedItems] = useState({});
+  const [editingEntryId, setEditingEntryId] = useState(null);
+  const [entryEditForm, setEntryEditForm] = useState({ price: '', nominal: '' });
+  const [editingExitId, setEditingExitId] = useState(null);
+  const [exitEditForm, setExitEditForm] = useState({ price: '', percent: '', nominalSold: '' });
+  const [exitEditMode, setExitEditMode] = useState('percent'); // 'percent' | 'nominal'
+  const [deletingEntryId, setDeletingEntryId] = useState(null);
+  const [deletingExitId, setDeletingExitId] = useState(null);
 
   const { data: journal, isLoading } = useQuery({
     queryKey: ['journal', journalId],
@@ -54,13 +75,18 @@ export function JournalDetailDialog({ journalId, open, onOpenChange }) {
     setEditMode(false);
     setConfirmDelete(false);
     setActiveAction(null);
+    setEditingEntryId(null);
+    setEditingExitId(null);
+    setDeletingEntryId(null);
+    setDeletingExitId(null);
   }, [journalId]);
 
   function resetAndInvalidate() {
     queryClient.invalidateQueries({ queryKey: ['journal', journalId] });
     queryClient.invalidateQueries({ queryKey: ['journals'] });
     setActiveAction(null);
-    setActionForm({ price: '', nominal: '', percent: '' });
+    setActionForm({ price: '', nominal: '', percent: '', nominalSold: '' });
+    setPartialMode('percent');
   }
 
   const statusMutation = useMutation({ mutationFn: api.updateJournalStatus, onSuccess: resetAndInvalidate });
@@ -80,8 +106,94 @@ export function JournalDetailDialog({ journalId, open, onOpenChange }) {
       onOpenChange(false);
     }
   });
+  const updateEntryMutation = useMutation({
+    mutationFn: api.updateEntry,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['journal', journalId] });
+      queryClient.invalidateQueries({ queryKey: ['journals'] });
+      setEditingEntryId(null);
+    }
+  });
+  const updateExitMutation = useMutation({
+    mutationFn: api.updateExit,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['journal', journalId] });
+      queryClient.invalidateQueries({ queryKey: ['journals'] });
+      setEditingExitId(null);
+    }
+  });
+  const deleteEntryMutation = useMutation({
+    mutationFn: api.deleteEntry,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['journal', journalId] });
+      queryClient.invalidateQueries({ queryKey: ['journals'] });
+      setDeletingEntryId(null);
+    }
+  });
+  const deleteExitMutation = useMutation({
+    mutationFn: api.deleteExit,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['journal', journalId] });
+      queryClient.invalidateQueries({ queryKey: ['journals'] });
+      setDeletingExitId(null);
+    }
+  });
 
   if (!open) return null;
+
+  const totalNominalIn = (journal?.entries || []).reduce((sum, en) => sum + Number(en.Nominal || 0), 0);
+
+  function startEditEntry(en) {
+    setEditingEntryId(en.EntryID);
+    setEntryEditForm({ price: en.EntryPrice ?? '', nominal: en.Nominal ?? '' });
+  }
+
+  function submitEditEntry(en) {
+    return (e) => {
+      e.preventDefault();
+      updateEntryMutation.mutate({
+        entryId: en.EntryID,
+        entryDate: en.EntryDate,
+        entryPrice: Number(entryEditForm.price),
+        nominal: Number(entryEditForm.nominal),
+        note: en.Note || ''
+      });
+    };
+  }
+
+  function startEditExit(ex) {
+    setEditingExitId(ex.ExitID);
+    setExitEditMode('percent');
+    const prefillNominal =
+      totalNominalIn > 0 ? Math.round((Number(ex.PercentSold || 0) / 100) * totalNominalIn) : '';
+    setExitEditForm({ price: ex.ExitPrice ?? '', percent: ex.PercentSold ?? '', nominalSold: prefillNominal });
+  }
+
+  function submitEditExit(ex) {
+    return (e) => {
+      e.preventDefault();
+      const payload = {
+        exitId: ex.ExitID,
+        exitDate: ex.ExitDate,
+        exitPrice: Number(exitEditForm.price)
+      };
+      if (ex.ExitType === 'TP Partial') {
+        payload.percentSold =
+          exitEditMode === 'nominal'
+            ? nominalToPercent(exitEditForm.nominalSold, totalNominalIn)
+            : Number(exitEditForm.percent);
+      }
+      updateExitMutation.mutate(payload);
+    };
+  }
+
+  function startDeleteEntry(id) {
+    setDeletingEntryId(id);
+  }
+
+  function startDeleteExit(id) {
+    setDeletingExitId(id);
+  }
 
   function enterEditMode() {
     if (!journal) return;
@@ -142,11 +254,18 @@ export function JournalDetailDialog({ journalId, open, onOpenChange }) {
   function submitExit(type) {
     return (e) => {
       e.preventDefault();
+      let percentSold = 100;
+      if (type === 'TP Partial') {
+        percentSold =
+          partialMode === 'nominal'
+            ? nominalToPercent(actionForm.nominalSold, totalNominalIn)
+            : Number(actionForm.percent);
+      }
       exitMutation.mutate({
         journalId,
         exitType: type,
         exitPrice: Number(actionForm.price),
-        percentSold: type === 'TP Partial' ? Number(actionForm.percent) : 100
+        percentSold
       });
     };
   }
@@ -336,15 +455,15 @@ export function JournalDetailDialog({ journalId, open, onOpenChange }) {
                   </div>
                   <div>
                     <p className="label-caps">Plan</p>
-                    <p className="font-semibold text-ink">{formatIDR(journal.PlanPrice)}</p>
+                    <p className="font-semibold text-ink">{hidden ? '******' : formatIDR(journal.PlanPrice)}</p>
                   </div>
                   <div>
                     <p className="label-caps text-accent-orange">TP</p>
-                    <p className="font-semibold text-ink">{formatIDR(journal.TP)}</p>
+                    <p className="font-semibold text-ink">{hidden ? '******' : formatIDR(journal.TP)}</p>
                   </div>
                   <div>
                     <p className="label-caps">CL</p>
-                    <p className="font-semibold text-ink">{formatIDR(journal.CL)}</p>
+                    <p className="font-semibold text-ink">{hidden ? '******' : formatIDR(journal.CL)}</p>
                   </div>
                   <div>
                     <p className="label-caps">R:R</p>
@@ -383,16 +502,111 @@ export function JournalDetailDialog({ journalId, open, onOpenChange }) {
                 <p className="label-caps mb-2">Riwayat Entry</p>
                 {journal.entries?.length > 0 ? (
                   <div className="space-y-1.5">
-                    {journal.entries.map((en) => (
-                      <div
-                        key={en.EntryID}
-                        className="flex items-center justify-between rounded-xl border border-border px-3 py-2 text-sm"
-                      >
-                        <span className="text-ink-muted">{formatDate(en.EntryDate)}</span>
-                        <span className="font-medium text-ink">{formatIDR(en.EntryPrice)}</span>
-                        <span className="text-ink-muted">Rp{formatIDR(en.Nominal)}</span>
-                      </div>
-                    ))}
+                    {journal.entries.map((en) =>
+                      deletingEntryId === en.EntryID ? (
+                        <div
+                          key={en.EntryID}
+                          className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm"
+                        >
+                          <p className="font-medium text-red-700">Hapus entry ini?</p>
+                          <p className="mt-1 text-red-600">Aksi ini nggak bisa dibatalin.</p>
+                          <div className="mt-2 flex justify-end gap-2">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setDeletingEntryId(null)}
+                            >
+                              Batal
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              onClick={() => deleteEntryMutation.mutate({ entryId: en.EntryID })}
+                              disabled={deleteEntryMutation.isPending}
+                              className="bg-red-600 hover:bg-red-700"
+                            >
+                              {deleteEntryMutation.isPending ? 'Menghapus...' : 'Ya, Hapus'}
+                            </Button>
+                          </div>
+                          {deleteEntryMutation.isError && (
+                            <p className="mt-2 text-red-600">{deleteEntryMutation.error.message}</p>
+                          )}
+                        </div>
+                      ) : editingEntryId === en.EntryID ? (
+                        <form
+                          key={en.EntryID}
+                          onSubmit={submitEditEntry(en)}
+                          className="space-y-2 rounded-xl border border-border p-3"
+                        >
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                            <div>
+                              <Label htmlFor={`entryPriceEdit-${en.EntryID}`}>Harga Masuk</Label>
+                              <Input
+                                id={`entryPriceEdit-${en.EntryID}`}
+                                type="number"
+                                required
+                                value={entryEditForm.price}
+                                onChange={(e) => setEntryEditForm({ ...entryEditForm, price: e.target.value })}
+                              />
+                            </div>
+                            <div>
+                              <Label htmlFor={`entryNominalEdit-${en.EntryID}`}>Nominal (Rp)</Label>
+                              <Input
+                                id={`entryNominalEdit-${en.EntryID}`}
+                                type="number"
+                                required
+                                value={entryEditForm.nominal}
+                                onChange={(e) => setEntryEditForm({ ...entryEditForm, nominal: e.target.value })}
+                              />
+                            </div>
+                          </div>
+                          {updateEntryMutation.isError && (
+                            <p className="text-sm text-red-600">{updateEntryMutation.error.message}</p>
+                          )}
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setEditingEntryId(null)}
+                            >
+                              Batal
+                            </Button>
+                            <Button type="submit" size="sm" disabled={updateEntryMutation.isPending}>
+                              {updateEntryMutation.isPending ? 'Menyimpan...' : 'Simpan'}
+                            </Button>
+                          </div>
+                        </form>
+                      ) : (
+                        <div
+                          key={en.EntryID}
+                          className="flex items-center justify-between gap-2 rounded-xl border border-border px-3 py-2 text-sm"
+                        >
+                          <span className="text-ink-muted">{formatDate(en.EntryDate)}</span>
+                          <span className="font-medium text-ink">{hidden ? '******' : formatIDR(en.EntryPrice)}</span>
+                          <span className="text-ink-muted">{hidden ? '******' : `Rp${formatIDR(en.Nominal)}`}</span>
+                          <div className="flex items-center gap-0.5">
+                            <button
+                              type="button"
+                              onClick={() => startEditEntry(en)}
+                              title="Edit entry"
+                              className="rounded-lg p-1 text-ink-faint transition-colors hover:bg-bg hover:text-ink"
+                            >
+                              <Pencil size={14} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => startDeleteEntry(en.EntryID)}
+                              title="Hapus entry"
+                              className="rounded-lg p-1 text-ink-faint transition-colors hover:bg-red-50 hover:text-red-600"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      )
+                    )}
                   </div>
                 ) : (
                   <p className="text-sm text-ink-faint">Belum ada entry.</p>
@@ -403,17 +617,166 @@ export function JournalDetailDialog({ journalId, open, onOpenChange }) {
                 <p className="label-caps mb-2">Riwayat Exit</p>
                 {journal.exits?.length > 0 ? (
                   <div className="space-y-1.5">
-                    {journal.exits.map((ex) => (
-                      <div
-                        key={ex.ExitID}
-                        className="flex items-center justify-between rounded-xl border border-border px-3 py-2 text-sm"
-                      >
-                        <span className="text-ink-muted">{formatDate(ex.ExitDate)}</span>
-                        <StatusBadge status={ex.ExitType} />
-                        <span className="font-medium text-ink">{formatIDR(ex.ExitPrice)}</span>
-                        {ex.ExitType === 'TP Partial' && <span className="text-ink-muted">{ex.PercentSold}%</span>}
-                      </div>
-                    ))}
+                    {journal.exits.map((ex) =>
+                      deletingExitId === ex.ExitID ? (
+                        <div key={ex.ExitID} className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm">
+                          <p className="font-medium text-red-700">Hapus exit ini?</p>
+                          <p className="mt-1 text-red-600">Aksi ini nggak bisa dibatalin.</p>
+                          <div className="mt-2 flex justify-end gap-2">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setDeletingExitId(null)}
+                            >
+                              Batal
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              onClick={() => deleteExitMutation.mutate({ exitId: ex.ExitID })}
+                              disabled={deleteExitMutation.isPending}
+                              className="bg-red-600 hover:bg-red-700"
+                            >
+                              {deleteExitMutation.isPending ? 'Menghapus...' : 'Ya, Hapus'}
+                            </Button>
+                          </div>
+                          {deleteExitMutation.isError && (
+                            <p className="mt-2 text-red-600">{deleteExitMutation.error.message}</p>
+                          )}
+                        </div>
+                      ) : editingExitId === ex.ExitID ? (
+                        <form
+                          key={ex.ExitID}
+                          onSubmit={submitEditExit(ex)}
+                          className="space-y-2 rounded-xl border border-border p-3"
+                        >
+                          {ex.ExitType === 'TP Partial' && (
+                            <div className="inline-flex items-center gap-1 rounded-lg bg-bg p-0.5">
+                              <button
+                                type="button"
+                                onClick={() => setExitEditMode('percent')}
+                                className={cn(
+                                  'rounded-md px-2 py-1 text-xs font-medium transition-colors',
+                                  exitEditMode === 'percent'
+                                    ? 'bg-white text-ink shadow-sm'
+                                    : 'text-ink-muted hover:text-ink'
+                                )}
+                              >
+                                Persen
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setExitEditMode('nominal')}
+                                className={cn(
+                                  'rounded-md px-2 py-1 text-xs font-medium transition-colors',
+                                  exitEditMode === 'nominal'
+                                    ? 'bg-white text-ink shadow-sm'
+                                    : 'text-ink-muted hover:text-ink'
+                                )}
+                              >
+                                Nominal
+                              </button>
+                            </div>
+                          )}
+                          <div
+                            className={`grid grid-cols-1 gap-2 ${
+                              ex.ExitType === 'TP Partial' ? 'sm:grid-cols-2' : ''
+                            }`}
+                          >
+                            <div>
+                              <Label htmlFor={`exitPriceEdit-${ex.ExitID}`}>Harga Jual</Label>
+                              <Input
+                                id={`exitPriceEdit-${ex.ExitID}`}
+                                type="number"
+                                required
+                                value={exitEditForm.price}
+                                onChange={(e) => setExitEditForm({ ...exitEditForm, price: e.target.value })}
+                              />
+                            </div>
+                            {ex.ExitType === 'TP Partial' && exitEditMode === 'percent' && (
+                              <div>
+                                <Label htmlFor={`exitPercentEdit-${ex.ExitID}`}>% Portofolio Terjual</Label>
+                                <Input
+                                  id={`exitPercentEdit-${ex.ExitID}`}
+                                  type="number"
+                                  min="1"
+                                  max="100"
+                                  required
+                                  value={exitEditForm.percent}
+                                  onChange={(e) => setExitEditForm({ ...exitEditForm, percent: e.target.value })}
+                                />
+                              </div>
+                            )}
+                            {ex.ExitType === 'TP Partial' && exitEditMode === 'nominal' && (
+                              <div>
+                                <Label htmlFor={`exitNominalEdit-${ex.ExitID}`}>Nominal Terjual (Rp)</Label>
+                                <Input
+                                  id={`exitNominalEdit-${ex.ExitID}`}
+                                  type="number"
+                                  required
+                                  value={exitEditForm.nominalSold}
+                                  onChange={(e) =>
+                                    setExitEditForm({ ...exitEditForm, nominalSold: e.target.value })
+                                  }
+                                />
+                                {exitEditForm.nominalSold && (
+                                  <p className="mt-1 text-xs text-ink-faint">
+                                    ≈ {nominalToPercent(exitEditForm.nominalSold, totalNominalIn)}% dari total modal
+                                  </p>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                          {updateExitMutation.isError && (
+                            <p className="text-sm text-red-600">{updateExitMutation.error.message}</p>
+                          )}
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setEditingExitId(null)}
+                            >
+                              Batal
+                            </Button>
+                            <Button type="submit" size="sm" disabled={updateExitMutation.isPending}>
+                              {updateExitMutation.isPending ? 'Menyimpan...' : 'Simpan'}
+                            </Button>
+                          </div>
+                        </form>
+                      ) : (
+                        <div
+                          key={ex.ExitID}
+                          className="flex items-center justify-between gap-2 rounded-xl border border-border px-3 py-2 text-sm"
+                        >
+                          <span className="text-ink-muted">{formatDate(ex.ExitDate)}</span>
+                          <StatusBadge status={ex.ExitType} />
+                          <span className="font-medium text-ink">{hidden ? '******' : formatIDR(ex.ExitPrice)}</span>
+                          {ex.ExitType === 'TP Partial' && (
+                            <span className="text-ink-muted">{formatPercent(ex.PercentSold)}%</span>
+                          )}
+                          <div className="flex items-center gap-0.5">
+                            <button
+                              type="button"
+                              onClick={() => startEditExit(ex)}
+                              title="Edit exit"
+                              className="rounded-lg p-1 text-ink-faint transition-colors hover:bg-bg hover:text-ink"
+                            >
+                              <Pencil size={14} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => startDeleteExit(ex.ExitID)}
+                              title="Hapus exit"
+                              className="rounded-lg p-1 text-ink-faint transition-colors hover:bg-red-50 hover:text-red-600"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      )
+                    )}
                   </div>
                 ) : (
                   <p className="text-sm text-ink-faint">Belum ada exit.</p>
@@ -517,7 +880,31 @@ export function JournalDetailDialog({ journalId, open, onOpenChange }) {
 
               {activeAction === 'tp-partial' && (
                 <form onSubmit={submitExit('TP Partial')} className="space-y-3 border-t border-border pt-4">
-                  <p className="label-caps">Catat Take Profit Partial</p>
+                  <div className="flex items-center justify-between">
+                    <p className="label-caps">Catat Take Profit Partial</p>
+                    <div className="inline-flex items-center gap-1 rounded-lg bg-bg p-0.5">
+                      <button
+                        type="button"
+                        onClick={() => setPartialMode('percent')}
+                        className={cn(
+                          'rounded-md px-2 py-1 text-xs font-medium transition-colors',
+                          partialMode === 'percent' ? 'bg-white text-ink shadow-sm' : 'text-ink-muted hover:text-ink'
+                        )}
+                      >
+                        Persen
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPartialMode('nominal')}
+                        className={cn(
+                          'rounded-md px-2 py-1 text-xs font-medium transition-colors',
+                          partialMode === 'nominal' ? 'bg-white text-ink shadow-sm' : 'text-ink-muted hover:text-ink'
+                        )}
+                      >
+                        Nominal
+                      </button>
+                    </div>
+                  </div>
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div>
                       <Label htmlFor="exitPricePartial">Harga Jual</Label>
@@ -529,18 +916,36 @@ export function JournalDetailDialog({ journalId, open, onOpenChange }) {
                         onChange={(e) => setActionForm({ ...actionForm, price: e.target.value })}
                       />
                     </div>
-                    <div>
-                      <Label htmlFor="exitPercent">% Portofolio Terjual</Label>
-                      <Input
-                        id="exitPercent"
-                        type="number"
-                        min="1"
-                        max="100"
-                        required
-                        value={actionForm.percent}
-                        onChange={(e) => setActionForm({ ...actionForm, percent: e.target.value })}
-                      />
-                    </div>
+                    {partialMode === 'percent' ? (
+                      <div>
+                        <Label htmlFor="exitPercent">% Portofolio Terjual</Label>
+                        <Input
+                          id="exitPercent"
+                          type="number"
+                          min="1"
+                          max="100"
+                          required
+                          value={actionForm.percent}
+                          onChange={(e) => setActionForm({ ...actionForm, percent: e.target.value })}
+                        />
+                      </div>
+                    ) : (
+                      <div>
+                        <Label htmlFor="exitNominal">Nominal Terjual (Rp)</Label>
+                        <Input
+                          id="exitNominal"
+                          type="number"
+                          required
+                          value={actionForm.nominalSold}
+                          onChange={(e) => setActionForm({ ...actionForm, nominalSold: e.target.value })}
+                        />
+                        {actionForm.nominalSold && (
+                          <p className="mt-1 text-xs text-ink-faint">
+                            ≈ {nominalToPercent(actionForm.nominalSold, totalNominalIn)}% dari total modal
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div className="flex justify-end gap-2">
                     <Button type="button" variant="ghost" size="sm" onClick={() => setActiveAction(null)}>

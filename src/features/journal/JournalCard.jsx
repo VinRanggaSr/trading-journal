@@ -2,6 +2,7 @@ import { Card } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
 import { StatusBadge } from './StatusBadge';
 import { LivePrice } from './LivePrice';
+import { useNominalVisibility } from '../../context/NominalVisibilityContext';
 
 function formatIDR(n) {
   if (n === '' || n === null || n === undefined || Number.isNaN(Number(n))) return '-';
@@ -9,6 +10,7 @@ function formatIDR(n) {
 }
 
 export function JournalCard({ journal, onClick, hideStatus = false }) {
+  const { hidden } = useNominalVisibility();
   return (
     <Card onClick={onClick} className="cursor-pointer p-2.5 shadow-none">
       <div className="px-2.5 pt-[5px]">
@@ -28,15 +30,15 @@ export function JournalCard({ journal, onClick, hideStatus = false }) {
       <div className="mt-4 grid grid-cols-3 gap-2 rounded-xl border border-border bg-bg px-3 py-[8.4px] text-center">
         <div>
           <p className="label-caps">Plan</p>
-          <p className="text-sm font-semibold text-ink">{formatIDR(journal.PlanPrice)}</p>
+          <p className="text-sm font-semibold text-ink">{hidden ? '******' : formatIDR(journal.PlanPrice)}</p>
         </div>
         <div>
           <p className="label-caps text-accent-orange">TP</p>
-          <p className="text-sm font-semibold text-ink">{formatIDR(journal.TP)}</p>
+          <p className="text-sm font-semibold text-ink">{hidden ? '******' : formatIDR(journal.TP)}</p>
         </div>
         <div>
           <p className="label-caps">CL</p>
-          <p className="text-sm font-semibold text-ink">{formatIDR(journal.CL)}</p>
+          <p className="text-sm font-semibold text-ink">{hidden ? '******' : formatIDR(journal.CL)}</p>
         </div>
       </div>
     </Card>

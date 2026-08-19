@@ -17,7 +17,7 @@ async function request(path, options = {}) {
     data = null;
   }
 
-  if (!res.ok) {
+  if (!res.ok || (data && data.error)) {
     const message = (data && data.error) || `Request gagal (${res.status})`;
     throw new Error(message);
   }
@@ -63,6 +63,10 @@ export const updateJournalPlan = (payload) => sheetsPost('updateJournalPlan', pa
 export const updateJournalStatus = (payload) => sheetsPost('updateJournalStatus', payload);
 export const addEntry = (payload) => sheetsPost('addEntry', payload);
 export const addExit = (payload) => sheetsPost('addExit', payload);
+export const updateEntry = (payload) => sheetsPost('updateEntry', payload);
+export const updateExit = (payload) => sheetsPost('updateExit', payload);
+export const deleteEntry = (payload) => sheetsPost('deleteEntry', payload);
+export const deleteExit = (payload) => sheetsPost('deleteExit', payload);
 export const deleteJournal = (payload) => sheetsPost('deleteJournal', payload);
 
 export const getStockAnalysis = () => sheetsGet('getStockAnalysis');

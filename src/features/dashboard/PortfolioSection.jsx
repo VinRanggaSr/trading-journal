@@ -8,6 +8,7 @@ import { computePosition } from '../../lib/journalStats';
 import { JournalDetailDialog } from '../journal/JournalDetailDialog';
 import { StatusBadge } from '../journal/StatusBadge';
 import { Badge } from '../../components/ui/badge';
+import { useNominalVisibility } from '../../context/NominalVisibilityContext';
 import { cn } from '../../lib/utils';
 
 function formatIDR(n) {
@@ -22,6 +23,7 @@ function formatSignedIDR(n) {
 }
 
 export function PortfolioSection({ journals }) {
+  const { hidden } = useNominalVisibility();
   const [selectedJournalId, setSelectedJournalId] = useState(null);
   const positions = journals.map(computePosition).filter(Boolean);
   const openTickers = [...new Set(positions.filter((p) => p.isOpen).map((p) => p.ticker))];
@@ -80,16 +82,20 @@ export function PortfolioSection({ journals }) {
         </CardHeader>
         <CardContent className="px-[9px] pb-[9px] pt-0">
           <div className="mb-[9px] grid grid-cols-1 gap-2 sm:grid-cols-3">
-            <StatCard label="Modal Aktif Entry" value={formatIDR(activeModal)} sub="Posisi yang masih terbuka" />
+            <StatCard
+              label="Modal Aktif Entry"
+              value={hidden ? '******' : formatIDR(activeModal)}
+              sub="Posisi yang masih terbuka"
+            />
             <StatCard
               label="Profit Posisi Aktif"
-              value={formatSignedIDR(activeProfit)}
+              value={hidden ? '******' : formatSignedIDR(activeProfit)}
               valueClassName={activeProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}
               sub={isLoadingPrices ? 'Memuat harga live...' : 'Belum direalisasi'}
             />
             <StatCard
               label="Total Untung/Rugi"
-              value={formatSignedIDR(totalProfitLoss)}
+              value={hidden ? '******' : formatSignedIDR(totalProfitLoss)}
               valueClassName={totalProfitLoss >= 0 ? 'text-emerald-600' : 'text-red-600'}
               sub="Realized + belum direalisasi"
             />
@@ -118,15 +124,19 @@ export function PortfolioSection({ journals }) {
                       <td className="px-3 py-1.5">
                         <StatusBadge status={r.status} />
                       </td>
-                      <td className="px-3 py-1.5 text-right text-ink-muted">{formatIDR(r.totalNominalIn)}</td>
-                      <td className="px-3 py-1.5 text-right font-medium text-ink">{formatIDR(r.totalValue)}</td>
+                      <td className="px-3 py-1.5 text-right text-ink-muted">
+                        {hidden ? '******' : formatIDR(r.totalNominalIn)}
+                      </td>
+                      <td className="px-3 py-1.5 text-right font-medium text-ink">
+                        {hidden ? '******' : formatIDR(r.totalValue)}
+                      </td>
                       <td
                         className={cn(
                           'px-3 py-1.5 text-right',
                           r.growthPct >= 0 ? 'text-emerald-600' : 'text-red-600'
                         )}
                       >
-                        {formatSignedIDR(r.totalValue - r.totalNominalIn)}
+                        {hidden ? '******' : formatSignedIDR(r.totalValue - r.totalNominalIn)}
                       </td>
                       <td className="px-3 py-1.5 text-right">
                         <Badge tone={r.growthPct >= 0 ? 'green' : 'red'}>

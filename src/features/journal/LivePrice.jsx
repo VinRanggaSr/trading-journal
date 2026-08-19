@@ -1,4 +1,5 @@
 import { useLivePrice } from '../../hooks/useLivePrice';
+import { useNominalVisibility } from '../../context/NominalVisibilityContext';
 import { cn } from '../../lib/utils';
 
 function formatIDR(n) {
@@ -7,6 +8,7 @@ function formatIDR(n) {
 
 export function LivePrice({ ticker, planPrice, className }) {
   const { price, isLoading, isError } = useLivePrice(ticker);
+  const { hidden } = useNominalVisibility();
 
   if (isLoading) {
     return <div className={cn('h-[1em] w-20 animate-pulse rounded bg-bg', className)} />;
@@ -21,7 +23,7 @@ export function LivePrice({ ticker, planPrice, className }) {
 
   return (
     <span className={cn('inline-flex items-baseline gap-1.5', className)}>
-      <span className="font-semibold text-ink">Rp{formatIDR(price)}</span>
+      <span className="font-semibold text-ink">{hidden ? '******' : `Rp${formatIDR(price)}`}</span>
       {diffPct !== null && (
         <span className={cn('text-xs font-medium', diffPct >= 0 ? 'text-emerald-600' : 'text-red-600')}>
           {diffPct >= 0 ? '+' : ''}
