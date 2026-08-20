@@ -50,9 +50,11 @@ export function PortfolioSection({ journals }) {
   const rows = positions.map((p) => {
     totalIn += p.totalNominalIn;
     let currentValueRemaining = 0;
+    // Modal yang masih "nyangkut" di posisi ini - berkurang seiring exit partial,
+    // dan jadi 0 begitu posisi ditutup penuh (remainingPercent = 0).
+    const modalRemaining = (p.remainingPercent / 100) * p.totalNominalIn;
 
     if (p.isOpen) {
-      const modalRemaining = (p.remainingPercent / 100) * p.totalNominalIn;
       const livePrice = priceMap[p.ticker];
       if (livePrice && p.avgEntryPrice > 0) {
         currentValueRemaining = modalRemaining * (livePrice / p.avgEntryPrice);
@@ -68,7 +70,13 @@ export function PortfolioSection({ journals }) {
     totalNow += totalValue;
     const growthPct = p.totalNominalIn > 0 ? ((totalValue - p.totalNominalIn) / p.totalNominalIn) * 100 : 0;
 
-    return { ...p, totalValue, growthPct };
+    // Growth aktif: untung/rugi murni dari posisi yang MASIH terbuka (modal aktif vs nilai
+    // aktif) - beda dari Growth (Rp)/(%) di atas yang menghitung total lifetime (realized +
+    // unrealized dari modal awal). null kalau posisi sudah ditutup penuh (tidak ada lagi yang aktif).
+    const growthActiveRp = modalRemaining > 0 ? currentValueRemaining - modalRemaining : null;
+    const growthActivePct = modalRemaining > 0 ? (growthActiveRp / modalRemaining) * 100 : null;
+
+    return { ...p, totalValue, growthPct, modalRemaining, currentValueRemaining, growthActiveRp, growthActivePct };
   });
 
   const totalProfitLoss = totalNow - totalIn;
@@ -110,8 +118,10 @@ export function PortfolioSection({ journals }) {
                   <tr className="border-b border-border">
                     <th className="label-caps px-3 py-2 text-left font-semibold">Ticker</th>
                     <th className="label-caps px-3 py-2 text-left font-semibold">Status</th>
-                    <th className="label-caps px-3 py-2 text-right font-semibold">Modal</th>
-                    <th className="label-caps px-3 py-2 text-right font-semibold">Nilai Sekarang</th>
+                    <th className="label-caps px-3 py-2 text-right font-semibold">Total Modal</th>
+                    <th className="label-caps px-3 py-2 text-right font-semibold">Modal Aktif</th>
+                    <th className="label-caps px-3 py-2 text-right font-semibold">Nilai Aktif</th>
+                    <th className="label-caps px-3 py-2 text-right font-semibold">Growth Aktif</th>
                     <th className="label-caps px-3 py-2 text-right font-semibold">Growth (Rp)</th>
                     <th className="label-caps px-3 py-2 text-right font-semibold">Growth (%)</th>
                     <th className="px-3 py-2" />
@@ -127,8 +137,24 @@ export function PortfolioSection({ journals }) {
                       <td className="px-3 py-1.5 text-right text-ink-muted">
                         {hidden ? '******' : formatIDR(r.totalNominalIn)}
                       </td>
+                      <td className="px-3 py-1.5 text-right text-ink-muted">
+                        {hidden ? '******' : formatIDR(r.modalRemaining)}
+                      </td>
                       <td className="px-3 py-1.5 text-right font-medium text-ink">
-                        {hidden ? '******' : formatIDR(r.totalValue)}
+                        {hidden ? '******' : formatIDR(r.currentValueRemaining)}
+                      </td>
+                      <td className="px-3 py-1.5 text-right">
+                        {r.growthActiveRp === null ? (
+                          <span className="text-ink-faint">-</span>
+                        ) : (
+                          <span className={cn(r.growthActiveRp >= 0 ? 'text-emerald-600' : 'text-red-600')}>
+                            {hidden ? '******' : formatSignedIDR(r.growthActiveRp)}
+                            <span className="ml-1 text-xs text-ink-faint">
+                              ({r.growthActivePct >= 0 ? '+' : ''}
+                              {r.growthActivePct.toFixed(1)}%)
+                            </span>
+                          </span>
+                        )}
                       </td>
                       <td
                         className={cn(
