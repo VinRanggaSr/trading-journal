@@ -21,7 +21,6 @@ export function FunnelSection({ stats }) {
       ) : (
         <div className="flex flex-col items-center gap-8 sm:flex-row">
           <div className="relative h-[190px] w-[190px] shrink-0">
-            <div className="absolute inset-3 rounded-full border border-dashed border-border" />
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie

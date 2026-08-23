@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { NotebookPen, LayoutDashboard, LineChart, LogOut, X } from 'lucide-react';
+import { NotebookPen, LayoutDashboard, LineChart, PieChart, LogOut, X } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useNominalVisibility } from '../../context/NominalVisibilityContext';
 import { Dialog, DialogContent, DialogHeader, DialogBody, DialogFooter } from '../ui/dialog';
@@ -10,6 +10,7 @@ import { cn } from '../../lib/utils';
 
 const navItems = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { to: '/alokasi-portfolio', label: 'Alokasi Portfolio', icon: PieChart },
   { to: '/journal', label: 'Journal', icon: NotebookPen },
   { to: '/analysis', label: 'Analisis Saham', icon: LineChart }
 ];
@@ -101,7 +102,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose = () => {} }) {
             <span
               className={cn(
                 'inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform',
-                hidden ? 'translate-x-4' : 'translate-x-1'
+                hidden ? 'translate-x-[19px]' : 'translate-x-[3px]'
               )}
             />
           </button>

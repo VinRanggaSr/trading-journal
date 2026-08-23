@@ -17,7 +17,7 @@ export function AnalysisCard({ analysis, onClick }) {
   const otherNotesPreview = stripHtml(analysis.OtherNotes);
 
   return (
-    <Card onClick={onClick} className="cursor-pointer overflow-hidden p-0 transition-shadow hover:shadow-md">
+    <Card onClick={onClick} className="cursor-pointer overflow-hidden p-0 shadow-none">
       <div className="relative flex h-28 items-center justify-center overflow-hidden bg-bg">
         <div className="dot-sphere" />
         <p className="relative z-10 rounded-full bg-surface px-4 py-1.5 font-mono text-lg font-bold text-ink shadow-sm">

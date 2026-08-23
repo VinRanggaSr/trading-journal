@@ -2,10 +2,10 @@ import { JournalCard } from './JournalCard';
 
 const COLUMNS = [
   { status: 'Pending', label: 'Pending', dot: 'bg-gray-400' },
-  { status: 'No Entry', label: 'No Entry', dot: 'bg-gray-400' },
   { status: 'Entry', label: 'Entry', dot: 'bg-accent-purple' },
   { status: 'TP Partial', label: 'TP Partial', dot: 'bg-accent-orange' },
   { status: 'TP', label: 'Take Profit', dot: 'bg-emerald-500' },
+  { status: 'No Entry', label: 'No Entry', dot: 'bg-gray-400' },
   { status: 'CL', label: 'Cut Loss', dot: 'bg-red-500' }
 ];
 
