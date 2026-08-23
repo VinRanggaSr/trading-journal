@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Card } from '../components/ui/card';
-import { Input, Label } from '../components/ui/input';
+import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
+import loginChartBg from '../assets/bg-new.png';
 
 export function LoginPage() {
   const { authenticated, loading, login } = useAuth();
@@ -30,17 +31,21 @@ export function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-bg px-4">
-      <Card className="w-full max-w-sm p-8">
-        <p className="text-lg font-bold tracking-tight text-ink">Trading Journal</p>
-        <p className="mt-1 text-sm text-ink-muted">Masuk untuk lanjut ke journal kamu</p>
+    <div
+      className="relative flex min-h-screen items-center justify-center overflow-hidden bg-bg bg-cover bg-center px-4"
+      style={{ backgroundImage: `url(${loginChartBg})` }}
+    >
+      <Card className="relative w-full max-w-sm bg-[#F6F6F7] p-8 shadow-none">
+        <p className="text-center text-lg font-bold tracking-tight text-ink">Trading Journal</p>
+        <p className="mt-1 text-center text-sm text-ink-muted">Masuk untuk lanjut ke journal kamu</p>
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           <div>
-            <Label htmlFor="password">Password</Label>
             <Input
               id="password"
               type="password"
+              placeholder="Masukan password"
+              className="bg-[#F6F6F7]"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoFocus
