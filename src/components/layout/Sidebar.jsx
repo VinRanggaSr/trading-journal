@@ -57,7 +57,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose = () => {} }) {
         )}
       >
         <div className="mb-6 flex items-center justify-between px-2.5">
-          <p className="text-sm font-bold tracking-tight text-ink">Trading Journal</p>
+          <p className="text-base font-bold tracking-tight text-ink">TradingJournal</p>
           <button
             type="button"
             onClick={onMobileClose}

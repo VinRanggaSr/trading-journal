@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
+import { ChartNoAxesCombined } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Card } from '../components/ui/card';
 import { Input } from '../components/ui/input';
@@ -36,7 +37,10 @@ export function LoginPage() {
       style={{ backgroundImage: `url(${loginChartBg})` }}
     >
       <Card className="relative w-full max-w-sm bg-[#F6F6F7] p-8 shadow-none">
-        <p className="text-center text-lg font-bold tracking-tight text-ink">Trading Journal</p>
+        <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl border border-border bg-[#F6F6F7] shadow-card">
+          <ChartNoAxesCombined size={20} strokeWidth={2.5} className="text-ink-muted" />
+        </div>
+        <p className="mt-4 text-center text-lg font-bold tracking-tight text-ink">TradingJournal</p>
         <p className="mt-1 text-center text-sm text-ink-muted">Masuk untuk lanjut ke journal kamu</p>
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">

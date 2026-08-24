@@ -20,7 +20,7 @@ export function AppLayout() {
           >
             <Menu size={20} />
           </button>
-          <p className="text-sm font-bold tracking-tight text-ink">Trading Journal</p>
+          <p className="text-sm font-bold tracking-tight text-ink">TradingJournal</p>
         </header>
 
         <main className="flex-1">
