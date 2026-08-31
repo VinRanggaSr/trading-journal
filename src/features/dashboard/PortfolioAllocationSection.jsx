@@ -65,15 +65,23 @@ export function PortfolioAllocationSection({ journals }) {
     .map((t) => ({
       ...t,
       profit: t.nilaiAktif - t.modalAktif,
-      pct: totalNilaiAktif > 0 ? (t.nilaiAktif / totalNilaiAktif) * 100 : 0
+      pct: totalModalAktif > 0 ? (t.modalAktif / totalModalAktif) * 100 : 0,
+      equityPct: totalNilaiAktif > 0 ? (t.nilaiAktif / totalNilaiAktif) * 100 : 0
     }))
     .sort((a, b) => b.nilaiAktif - a.nilaiAktif)
     .map((t, i) => ({ ...t, color: PALETTE[i % PALETTE.length] }));
 
   const chartData = tickerRows.map((t) => ({
     name: t.ticker,
-    value: t.nilaiAktif > 0 ? t.nilaiAktif : t.modalAktif,
+    value: t.modalAktif,
     pct: t.pct
+  }));
+
+  const growthRows = tickerRows;
+  const growthChartData = tickerRows.map((t) => ({
+    name: t.ticker,
+    value: t.nilaiAktif > 0 ? t.nilaiAktif : t.modalAktif,
+    pct: t.equityPct
   }));
 
   return (
@@ -158,6 +166,79 @@ export function PortfolioAllocationSection({ journals }) {
                       <div className="flex items-center gap-3 text-right">
                         <span className="text-ink-muted">{hidden ? '******' : formatIDR(t.modalAktif)}</span>
                         <span className="w-12 shrink-0 font-mono font-semibold text-ink">{t.pct.toFixed(1)}%</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="shadow-none">
+        <CardHeader>
+          <CardLabel>Kontribusi Growth per Ticker</CardLabel>
+        </CardHeader>
+        <CardContent>
+          {growthRows.length === 0 ? (
+            <p className="text-sm text-ink-faint">Belum ada posisi aktif.</p>
+          ) : (
+            <div className="flex flex-col items-center gap-8 sm:flex-row sm:items-start">
+              <div className="relative h-[190px] w-[190px] shrink-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Tooltip
+                      content={<ChartTooltip />}
+                      allowEscapeViewBox={{ x: true, y: true }}
+                      wrapperStyle={{ zIndex: 30, pointerEvents: 'none' }}
+                    />
+                    <Pie
+                      data={growthChartData}
+                      dataKey="value"
+                      nameKey="name"
+                      innerRadius={62}
+                      outerRadius={82}
+                      paddingAngle={growthChartData.length > 1 ? 4 : 0}
+                      cornerRadius={8}
+                      startAngle={90}
+                      endAngle={-270}
+                      isAnimationActive={false}
+                      stroke="none"
+                    >
+                      {growthChartData.map((d, i) => (
+                        <Cell key={d.name} fill={growthRows[i].color} />
+                      ))}
+                    </Pie>
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                  <p className="font-mono text-2xl font-bold text-ink">{growthRows.length}</p>
+                  <p className="text-xs text-ink-muted">Ticker Aktif</p>
+                </div>
+              </div>
+
+              <div className="w-full flex-1 divide-y divide-dashed divide-border">
+                {growthRows.map((t) => {
+                  return (
+                    <div
+                      key={t.ticker}
+                      className="flex flex-wrap items-center justify-between gap-y-1 py-3 text-sm first:pt-0 last:pb-0"
+                    >
+                      <div className="flex min-w-0 items-center gap-2.5">
+                        <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: t.color }} />
+                        <span className="font-medium text-ink">{t.ticker}</span>
+                        {t.journalCount > 1 && (
+                          <span className="shrink-0 rounded-full bg-[#EFEFF1] px-2 py-0.5 text-xs text-ink-faint">
+                            {t.journalCount} journal
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3 text-right">
+                        <span className="text-ink-muted">{hidden ? '******' : formatIDR(t.nilaiAktif)}</span>
+                        <span className="w-12 shrink-0 font-mono font-semibold text-ink">
+                          {t.equityPct.toFixed(1)}%
+                        </span>
                       </div>
                     </div>
                   );
