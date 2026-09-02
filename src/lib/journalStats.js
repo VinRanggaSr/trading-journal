@@ -49,14 +49,25 @@ export function computePosition(journal) {
   }, 0);
   const avgEntryPrice = totalShares > 0 ? totalNominalIn / totalShares : 0;
 
-  const percentSoldTotal = exits.reduce((sum, ex) => sum + Number(ex.PercentSold || 0), 0);
-  const remainingPercent = Math.max(0, 100 - percentSoldTotal);
+  // Proses exit urut kronologis dan batasi tiap exit supaya nggak "jual" lebih dari
+  // sisa modal yang beneran ada saat itu. Ini jaga-jaga kalau ada data lama/rusak
+  // di mana exit full (TP/CL) kesimpen PercentSold: 100 walau sebelumnya udah ada
+  // partial exit duluan - tanpa ini, realizedValue bakal dobel-hitung modal yang
+  // sama dan growth jadi kelihatan untung padahal aslinya rugi.
+  const sortedExits = [...exits].sort((a, b) => new Date(a.ExitDate) - new Date(b.ExitDate));
 
-  const realizedValue = exits.reduce((sum, ex) => {
-    const portionValue = (Number(ex.PercentSold || 0) / 100) * totalNominalIn;
+  let remaining = 100;
+  const realizedValue = sortedExits.reduce((sum, ex) => {
+    const requestedPercent = Number(ex.PercentSold || 0);
+    const effectivePercent = Math.min(Math.max(requestedPercent, 0), remaining);
+    remaining -= effectivePercent;
+
+    const portionValue = (effectivePercent / 100) * totalNominalIn;
     const priceRatio = avgEntryPrice > 0 ? Number(ex.ExitPrice || 0) / avgEntryPrice : 0;
     return sum + portionValue * priceRatio;
   }, 0);
+
+  const remainingPercent = Math.max(0, remaining);
 
   return {
     journalId: journal.JournalID,
