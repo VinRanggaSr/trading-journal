@@ -17,10 +17,10 @@ export function AnalysisCard({ analysis, onClick }) {
   const otherNotesPreview = stripHtml(analysis.OtherNotes);
 
   return (
-    <Card onClick={onClick} className="cursor-pointer overflow-hidden p-0 shadow-none">
+    <Card onClick={onClick} className="group cursor-pointer overflow-hidden p-0 shadow-none">
       <div className="relative flex h-28 items-center justify-center overflow-hidden bg-bg">
         <div className="dot-sphere" />
-        <p className="relative z-10 rounded-full bg-surface px-4 py-1.5 font-mono text-lg font-bold text-ink shadow-sm">
+        <p className="relative z-10 rounded-full bg-surface px-4 py-1.5 font-mono text-lg font-bold text-ink shadow-sm transition-transform duration-300 ease-out group-hover:-translate-y-1 group-hover:scale-105">
           {analysis.Ticker}
         </p>
         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-surface to-transparent" />

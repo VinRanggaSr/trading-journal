@@ -12,18 +12,19 @@ const sizes = {
   lg: 'h-12 px-6 text-base'
 };
 
-export function Button({ className, variant = 'primary', size = 'default', ...props }) {
-  return (
-    <button
-      className={cn(
-        'inline-flex items-center justify-center gap-2 rounded-xl font-medium transition-colors',
-        'disabled:opacity-50 disabled:pointer-events-none',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/30',
-        variants[variant],
-        sizes[size],
-        className
-      )}
-      {...props}
-    />
+export function Button({ className, variant = 'primary', size = 'default', href, ...props }) {
+  const classes = cn(
+    'inline-flex items-center justify-center gap-2 rounded-xl font-medium transition-colors',
+    'disabled:opacity-50 disabled:pointer-events-none',
+    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/30',
+    variants[variant],
+    sizes[size],
+    className
   );
+
+  if (href) {
+    return <a href={href} className={classes} {...props} />;
+  }
+
+  return <button className={classes} {...props} />;
 }

@@ -11,6 +11,7 @@ import { StockAnalysisPage } from './pages/StockAnalysisPage';
 import { AnalysisDetailPage } from './pages/AnalysisDetailPage';
 import { JournalNewPage } from './pages/JournalNewPage';
 import { PortfolioAllocationPage } from './pages/PortfolioAllocationPage';
+import { ResearchSahamPage } from './pages/ResearchSahamPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -43,6 +44,7 @@ export default function App() {
                 <Route path="/alokasi-portfolio" element={<PortfolioAllocationPage />} />
                 <Route path="/analysis" element={<StockAnalysisPage />} />
                 <Route path="/analysis/:analysisId" element={<AnalysisDetailPage />} />
+                <Route path="/research-saham" element={<ResearchSahamPage />} />
               </Route>
 
               <Route path="/" element={<Navigate to="/journal" replace />} />
