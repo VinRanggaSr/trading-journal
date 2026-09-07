@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { NotebookPen, LayoutDashboard, LineChart, PieChart, LogOut, X } from 'lucide-react';
+import { NotebookPen, LayoutDashboard, LineChart, PieChart, Compass, LogOut, X } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useNominalVisibility } from '../../context/NominalVisibilityContext';
 import { Dialog, DialogContent, DialogHeader, DialogBody, DialogFooter } from '../ui/dialog';
@@ -12,7 +12,8 @@ const navItems = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/alokasi-portfolio', label: 'Alokasi Portfolio', icon: PieChart },
   { to: '/journal', label: 'Journal', icon: NotebookPen },
-  { to: '/analysis', label: 'Analisis Saham', icon: LineChart }
+  { to: '/analysis', label: 'Analisis Saham', icon: LineChart },
+  { to: '/research-saham', label: 'Research Saham', icon: Compass }
 ];
 
 export function Sidebar({ mobileOpen = false, onMobileClose = () => {} }) {
