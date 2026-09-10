@@ -23,7 +23,7 @@
 # forward /api/* ke functions secara otomatis.
 [dev]
   command = "npm run dev"
-  targetPort = 5173
+  targetPort = 5183
   port = 8888
   publish = "dist"
   autoLaunch = false

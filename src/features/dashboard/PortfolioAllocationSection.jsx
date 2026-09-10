@@ -1,5 +1,6 @@
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { Card, CardHeader, CardLabel, CardContent } from '../../components/ui/card';
+import { Badge } from '../../components/ui/badge';
 import { StatCard } from './StatCard';
 import { useLivePositions } from '../../hooks/useLivePositions';
 import { useNominalVisibility } from '../../context/NominalVisibilityContext';
@@ -66,7 +67,8 @@ export function PortfolioAllocationSection({ journals }) {
       ...t,
       profit: t.nilaiAktif - t.modalAktif,
       pct: totalModalAktif > 0 ? (t.modalAktif / totalModalAktif) * 100 : 0,
-      equityPct: totalNilaiAktif > 0 ? (t.nilaiAktif / totalNilaiAktif) * 100 : 0
+      equityPct: totalNilaiAktif > 0 ? (t.nilaiAktif / totalNilaiAktif) * 100 : 0,
+      growthPct: t.modalAktif > 0 ? ((t.nilaiAktif - t.modalAktif) / t.modalAktif) * 100 : 0
     }))
     .sort((a, b) => b.nilaiAktif - a.nilaiAktif)
     .map((t, i) => ({ ...t, color: PALETTE[i % PALETTE.length] }));
@@ -235,6 +237,10 @@ export function PortfolioAllocationSection({ journals }) {
                         )}
                       </div>
                       <div className="flex items-center gap-3 text-right">
+                        <Badge tone={t.growthPct >= 0 ? 'green' : 'red'}>
+                          {t.growthPct >= 0 ? '+' : ''}
+                          {t.growthPct.toFixed(1)}%
+                        </Badge>
                         <span className="text-ink-muted">{hidden ? '******' : formatIDR(t.nilaiAktif)}</span>
                         <span className="w-12 shrink-0 font-mono font-semibold text-ink">
                           {t.equityPct.toFixed(1)}%
