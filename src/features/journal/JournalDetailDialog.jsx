@@ -11,20 +11,17 @@ import { StatusBadge } from './StatusBadge';
 import { LivePrice } from './LivePrice';
 import { useNominalVisibility } from '../../context/NominalVisibilityContext';
 import { cn } from '../../lib/utils';
+import { replayPosition } from '../../lib/journalStats';
 
 function formatIDR(n) {
   if (n === '' || n === null || n === undefined || Number.isNaN(Number(n))) return '-';
   return new Intl.NumberFormat('id-ID').format(n);
 }
 
-function nominalToPercent(nominal, total) {
-  if (!total || total <= 0) return 0;
-  return Math.round((Number(nominal || 0) / total) * 10000) / 100;
-}
-
-function formatPercent(n) {
-  const num = Number(n || 0);
-  return (Math.round(num * 100) / 100).toString();
+// Backend lama masih nyimpen kolom PercentSold, jadi tetap dikirim (diturunkan dari nominal).
+function toPercent(nominal, base) {
+  if (!base || base <= 0) return 0;
+  return Math.round((Number(nominal || 0) / base) * 100000000) / 1000000;
 }
 
 function formatDate(iso) {
@@ -42,8 +39,7 @@ export function JournalDetailDialog({ journalId, open, onOpenChange }) {
   const queryClient = useQueryClient();
   const { hidden } = useNominalVisibility();
   const [activeAction, setActiveAction] = useState(null); // null | 'entry' | 'tp' | 'tp-partial' | 'cl'
-  const [actionForm, setActionForm] = useState({ price: '', nominal: '', percent: '', nominalSold: '' });
-  const [partialMode, setPartialMode] = useState('percent'); // 'percent' | 'nominal'
+  const [actionForm, setActionForm] = useState({ price: '', nominal: '', nominalSold: '' });
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [editForm, setEditForm] = useState(emptyEditForm);
@@ -51,8 +47,7 @@ export function JournalDetailDialog({ journalId, open, onOpenChange }) {
   const [editingEntryId, setEditingEntryId] = useState(null);
   const [entryEditForm, setEntryEditForm] = useState({ price: '', nominal: '' });
   const [editingExitId, setEditingExitId] = useState(null);
-  const [exitEditForm, setExitEditForm] = useState({ price: '', percent: '', nominalSold: '' });
-  const [exitEditMode, setExitEditMode] = useState('percent'); // 'percent' | 'nominal'
+  const [exitEditForm, setExitEditForm] = useState({ price: '', nominalSold: '' });
   const [deletingEntryId, setDeletingEntryId] = useState(null);
   const [deletingExitId, setDeletingExitId] = useState(null);
 
@@ -86,8 +81,7 @@ export function JournalDetailDialog({ journalId, open, onOpenChange }) {
     queryClient.invalidateQueries({ queryKey: ['journal', journalId] });
     queryClient.invalidateQueries({ queryKey: ['journals'] });
     setActiveAction(null);
-    setActionForm({ price: '', nominal: '', percent: '', nominalSold: '' });
-    setPartialMode('percent');
+    setActionForm({ price: '', nominal: '', nominalSold: '' });
   }
 
   const statusMutation = useMutation({ mutationFn: api.updateJournalStatus, onSuccess: resetAndInvalidate });
@@ -142,13 +136,13 @@ export function JournalDetailDialog({ journalId, open, onOpenChange }) {
 
   if (!open) return null;
 
-  const totalNominalIn = (journal?.entries || []).reduce((sum, en) => sum + Number(en.Nominal || 0), 0);
   const hasEntries = (journal?.entries?.length || 0) > 0;
-  const percentSoldTotal = (journal?.exits || []).reduce((sum, ex) => sum + Number(ex.PercentSold || 0), 0);
-  // Sisa modal aktif saat ini (dalam %) - dihitung ulang dari entries/exits yang benar-benar
-  // ada sekarang, bukan dari field Status yang bisa basi kalau exit-nya diedit/dihapus.
-  const remainingPercent = hasEntries ? Math.max(0, 100 - percentSoldTotal) : 100;
-  const isPositionClosed = hasEntries && remainingPercent <= 0;
+  const replay = replayPosition(journal || {});
+  const totalNominalIn = replay.capitalIn;
+  // Sisa modal aktif (Rp) - dihitung dari entries/exits yang beneran ada sekarang,
+  // bukan dari field Status yang bisa basi kalau exit-nya diedit/dihapus.
+  const remainingNominal = hasEntries ? replay.remainingNominal : 0;
+  const isPositionClosed = hasEntries && remainingNominal < 1;
 
   function startEditEntry(en) {
     setEditingEntryId(en.EntryID);
@@ -170,27 +164,21 @@ export function JournalDetailDialog({ journalId, open, onOpenChange }) {
 
   function startEditExit(ex) {
     setEditingExitId(ex.ExitID);
-    setExitEditMode('percent');
-    const prefillNominal =
-      totalNominalIn > 0 ? Math.round((Number(ex.PercentSold || 0) / 100) * totalNominalIn) : '';
-    setExitEditForm({ price: ex.ExitPrice ?? '', percent: ex.PercentSold ?? '', nominalSold: prefillNominal });
+    const nominal = replay.exitRows[ex.ExitID]?.nominal;
+    setExitEditForm({ price: ex.ExitPrice ?? '', nominalSold: nominal ? Math.round(nominal) : '' });
   }
 
   function submitEditExit(ex) {
     return (e) => {
       e.preventDefault();
-      // percentSold sekarang relevan untuk SEMUA tipe exit (TP/CL full close juga
-      // menyimpan % modal aktif yang dijual saat itu, bukan selalu 100).
-      const payload = {
+      const nominalSold = Number(exitEditForm.nominalSold);
+      updateExitMutation.mutate({
         exitId: ex.ExitID,
         exitDate: ex.ExitDate,
         exitPrice: Number(exitEditForm.price),
-        percentSold:
-          exitEditMode === 'nominal'
-            ? nominalToPercent(exitEditForm.nominalSold, totalNominalIn)
-            : Number(exitEditForm.percent)
-      };
-      updateExitMutation.mutate(payload);
+        nominalSold,
+        percentSold: toPercent(nominalSold, replay.exitRows[ex.ExitID]?.capitalInAtExit || totalNominalIn)
+      });
     };
   }
 
@@ -268,20 +256,17 @@ export function JournalDetailDialog({ journalId, open, onOpenChange }) {
   function submitExit(type) {
     return (e) => {
       e.preventDefault();
-      // Take Profit / Cut Loss (full close) selalu menjual SISA modal aktif saat ini,
-      // bukan hardcode 100 - biar nggak dobel-hitung kalau sebelumnya udah ada exit partial.
-      let percentSold = remainingPercent;
-      if (type === 'TP Partial') {
-        percentSold =
-          partialMode === 'nominal'
-            ? nominalToPercent(actionForm.nominalSold, totalNominalIn)
-            : Number(actionForm.percent);
-      }
+      // TP / CL full close menjual SELURUH sisa modal aktif; TP Partial pakai nominal yang diinput.
+      const nominalSold =
+        type === 'TP Partial'
+          ? Math.min(Number(actionForm.nominalSold), Math.round(remainingNominal))
+          : Math.round(remainingNominal);
       exitMutation.mutate({
         journalId,
         exitType: type,
         exitPrice: Number(actionForm.price),
-        percentSold
+        nominalSold,
+        percentSold: toPercent(nominalSold, totalNominalIn)
       });
     };
   }
@@ -515,6 +500,18 @@ export function JournalDetailDialog({ journalId, open, onOpenChange }) {
               )}
 
               <div>
+                <p className="label-caps mb-2">Modal Aktif</p>
+                <p className="font-mono text-2xl font-bold text-ink">
+                  {hidden ? '******' : `Rp${formatIDR(Math.round(remainingNominal))}`}
+                </p>
+                <p className="mt-1 text-xs text-ink-muted">
+                  {hasEntries
+                    ? `Dari total modal masuk ${hidden ? '******' : `Rp${formatIDR(Math.round(totalNominalIn))}`}`
+                    : 'Belum ada entry'}
+                </p>
+              </div>
+
+              <div>
                 <p className="label-caps mb-2">Riwayat Entry</p>
                 {journal.entries?.length > 0 ? (
                   <div className="space-y-1.5">
@@ -667,32 +664,6 @@ export function JournalDetailDialog({ journalId, open, onOpenChange }) {
                           onSubmit={submitEditExit(ex)}
                           className="space-y-2 rounded-xl border border-border p-3"
                         >
-                          <div className="inline-flex items-center gap-1 rounded-lg bg-bg p-0.5">
-                            <button
-                              type="button"
-                              onClick={() => setExitEditMode('percent')}
-                              className={cn(
-                                'rounded-md px-2 py-1 text-xs font-medium transition-colors',
-                                exitEditMode === 'percent'
-                                  ? 'bg-white text-ink shadow-sm'
-                                  : 'text-ink-muted hover:text-ink'
-                              )}
-                            >
-                              Persen
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setExitEditMode('nominal')}
-                              className={cn(
-                                'rounded-md px-2 py-1 text-xs font-medium transition-colors',
-                                exitEditMode === 'nominal'
-                                  ? 'bg-white text-ink shadow-sm'
-                                  : 'text-ink-muted hover:text-ink'
-                              )}
-                            >
-                              Nominal
-                            </button>
-                          </div>
                           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                             <div>
                               <Label htmlFor={`exitPriceEdit-${ex.ExitID}`}>Harga Jual</Label>
@@ -704,39 +675,17 @@ export function JournalDetailDialog({ journalId, open, onOpenChange }) {
                                 onChange={(e) => setExitEditForm({ ...exitEditForm, price: e.target.value })}
                               />
                             </div>
-                            {exitEditMode === 'percent' ? (
-                              <div>
-                                <Label htmlFor={`exitPercentEdit-${ex.ExitID}`}>% Modal Terjual</Label>
-                                <Input
-                                  id={`exitPercentEdit-${ex.ExitID}`}
-                                  type="number"
-                                  min="0.01"
-                                  max="100"
-                                  step="0.01"
-                                  required
-                                  value={exitEditForm.percent}
-                                  onChange={(e) => setExitEditForm({ ...exitEditForm, percent: e.target.value })}
-                                />
-                              </div>
-                            ) : (
-                              <div>
-                                <Label htmlFor={`exitNominalEdit-${ex.ExitID}`}>Nominal Terjual (Rp)</Label>
-                                <Input
-                                  id={`exitNominalEdit-${ex.ExitID}`}
-                                  type="number"
-                                  required
-                                  value={exitEditForm.nominalSold}
-                                  onChange={(e) =>
-                                    setExitEditForm({ ...exitEditForm, nominalSold: e.target.value })
-                                  }
-                                />
-                                {exitEditForm.nominalSold && (
-                                  <p className="mt-1 text-xs text-ink-faint">
-                                    ≈ {nominalToPercent(exitEditForm.nominalSold, totalNominalIn)}% dari total modal
-                                  </p>
-                                )}
-                              </div>
-                            )}
+                            <div>
+                              <Label htmlFor={`exitNominalEdit-${ex.ExitID}`}>Nominal Terjual (Rp)</Label>
+                              <Input
+                                id={`exitNominalEdit-${ex.ExitID}`}
+                                type="number"
+                                min="1"
+                                required
+                                value={exitEditForm.nominalSold}
+                                onChange={(e) => setExitEditForm({ ...exitEditForm, nominalSold: e.target.value })}
+                              />
+                            </div>
                           </div>
                           {updateExitMutation.isError && (
                             <p className="text-sm text-red-600">{updateExitMutation.error.message}</p>
@@ -763,7 +712,9 @@ export function JournalDetailDialog({ journalId, open, onOpenChange }) {
                           <span className="text-ink-muted">{formatDate(ex.ExitDate)}</span>
                           <StatusBadge status={ex.ExitType} />
                           <span className="font-medium text-ink">{hidden ? '******' : formatIDR(ex.ExitPrice)}</span>
-                          <span className="text-ink-muted">{formatPercent(ex.PercentSold)}%</span>
+                          <span className="text-ink-muted">
+                            {hidden ? '******' : `Rp${formatIDR(Math.round(replay.exitRows[ex.ExitID]?.nominal || 0))}`}
+                          </span>
                           <div className="flex items-center gap-0.5">
                             <button
                               type="button"
@@ -869,7 +820,7 @@ export function JournalDetailDialog({ journalId, open, onOpenChange }) {
                 >
                   <p className="label-caps">{activeAction === 'tp' ? 'Catat Take Profit' : 'Catat Cut Loss'}</p>
                   <p className="text-xs text-ink-faint">
-                    Akan menjual seluruh sisa modal aktif ({formatPercent(remainingPercent)}%) di harga ini.
+                    Akan menjual seluruh sisa modal aktif ({hidden ? '******' : `Rp${formatIDR(Math.round(remainingNominal))}`}) di harga ini.
                   </p>
                   <div>
                     <Label htmlFor="exitPrice">Harga Jual</Label>
@@ -894,31 +845,7 @@ export function JournalDetailDialog({ journalId, open, onOpenChange }) {
 
               {activeAction === 'tp-partial' && (
                 <form onSubmit={submitExit('TP Partial')} className="space-y-3 border-t border-border pt-4">
-                  <div className="flex items-center justify-between">
-                    <p className="label-caps">Catat Take Profit Partial</p>
-                    <div className="inline-flex items-center gap-1 rounded-lg bg-bg p-0.5">
-                      <button
-                        type="button"
-                        onClick={() => setPartialMode('percent')}
-                        className={cn(
-                          'rounded-md px-2 py-1 text-xs font-medium transition-colors',
-                          partialMode === 'percent' ? 'bg-white text-ink shadow-sm' : 'text-ink-muted hover:text-ink'
-                        )}
-                      >
-                        Persen
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setPartialMode('nominal')}
-                        className={cn(
-                          'rounded-md px-2 py-1 text-xs font-medium transition-colors',
-                          partialMode === 'nominal' ? 'bg-white text-ink shadow-sm' : 'text-ink-muted hover:text-ink'
-                        )}
-                      >
-                        Nominal
-                      </button>
-                    </div>
-                  </div>
+                  <p className="label-caps">Catat Take Profit Partial</p>
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div>
                       <Label htmlFor="exitPricePartial">Harga Jual</Label>
@@ -930,37 +857,21 @@ export function JournalDetailDialog({ journalId, open, onOpenChange }) {
                         onChange={(e) => setActionForm({ ...actionForm, price: e.target.value })}
                       />
                     </div>
-                    {partialMode === 'percent' ? (
-                      <div>
-                        <Label htmlFor="exitPercent">% Portofolio Terjual</Label>
-                        <Input
-                          id="exitPercent"
-                          type="number"
-                          min="1"
-                          max={remainingPercent}
-                          required
-                          value={actionForm.percent}
-                          onChange={(e) => setActionForm({ ...actionForm, percent: e.target.value })}
-                        />
-                        <p className="mt-1 text-xs text-ink-faint">Sisa modal aktif: {formatPercent(remainingPercent)}%</p>
-                      </div>
-                    ) : (
-                      <div>
-                        <Label htmlFor="exitNominal">Nominal Terjual (Rp)</Label>
-                        <Input
-                          id="exitNominal"
-                          type="number"
-                          required
-                          value={actionForm.nominalSold}
-                          onChange={(e) => setActionForm({ ...actionForm, nominalSold: e.target.value })}
-                        />
-                        {actionForm.nominalSold && (
-                          <p className="mt-1 text-xs text-ink-faint">
-                            ≈ {nominalToPercent(actionForm.nominalSold, totalNominalIn)}% dari total modal
-                          </p>
-                        )}
-                      </div>
-                    )}
+                    <div>
+                      <Label htmlFor="exitNominal">Nominal Terjual (Rp)</Label>
+                      <Input
+                        id="exitNominal"
+                        type="number"
+                        min="1"
+                        max={Math.round(remainingNominal)}
+                        required
+                        value={actionForm.nominalSold}
+                        onChange={(e) => setActionForm({ ...actionForm, nominalSold: e.target.value })}
+                      />
+                      <p className="mt-1 text-xs text-ink-faint">
+                        Sisa modal aktif: {hidden ? '******' : `Rp${formatIDR(Math.round(remainingNominal))}`}
+                      </p>
+                    </div>
                   </div>
                   <div className="flex justify-end gap-2">
                     <Button type="button" variant="ghost" size="sm" onClick={() => setActiveAction(null)}>

@@ -26,57 +26,87 @@ export function computeFunnelStats(journals) {
   };
 }
 
+const toTime = (v) => {
+  const t = new Date(v).getTime();
+  return Number.isNaN(t) ? 0 : t;
+};
+
 /**
- * Hitung posisi dari satu journal: total modal masuk, harga rata-rata entry
- * (weighted by nominal), sisa % yang belum di-exit, dan nilai yang sudah
- * direalisasi dari exit yang sudah tercatat.
+ * Replay entry & exit satu journal secara kronologis (moving-average cost).
  *
- * CATATAN: ini estimasi. Perhitungan cost-basis yang presisi untuk partial
- * sell berurutan itu kompleks - di sini disederhanakan dengan asumsi setiap
- * % exit dihitung dari total modal awal, bukan dari sisa modal terkini.
- * Cukup akurat untuk journal personal, tapi bukan pembukuan akuntansi resmi.
+ * Exit dicatat dalam NOMINAL Rp modal yang dijual (ex.NominalSold), jadi nilainya
+ * tetap walau setelah itu ada tambah posisi. Data lama yang cuma punya PercentSold
+ * dikonversi ke nominal pakai total modal masuk SAMPAI saat exit itu terjadi.
+ * Tiap exit dibatasi sebesar sisa modal saat itu supaya data rusak nggak dobel-hitung.
  */
-export function computePosition(journal) {
+export function replayPosition(journal) {
   const entries = journal.entries || [];
   const exits = journal.exits || [];
 
-  if (entries.length === 0) return null;
+  const events = [
+    ...entries.map((e) => ({ kind: 'entry', t: toTime(e.EntryDate), e })),
+    ...exits.map((x) => ({ kind: 'exit', t: toTime(x.ExitDate), x }))
+  ].sort((a, b) => a.t - b.t || (a.kind === b.kind ? 0 : a.kind === 'entry' ? -1 : 1));
 
-  const totalNominalIn = entries.reduce((sum, e) => sum + Number(e.Nominal || 0), 0);
-  const totalShares = entries.reduce((sum, e) => {
-    const price = Number(e.EntryPrice || 0);
-    return price > 0 ? sum + Number(e.Nominal || 0) / price : sum;
+  let capitalIn = 0;
+  let remaining = 0;
+  let shares = 0;
+  let realizedValue = 0;
+  const exitRows = {};
+
+  events.forEach((ev) => {
+    if (ev.kind === 'entry') {
+      const n = Number(ev.e.Nominal || 0);
+      const p = Number(ev.e.EntryPrice || 0);
+      if (n <= 0) return;
+      capitalIn += n;
+      remaining += n;
+      if (p > 0) shares += n / p;
+      return;
+    }
+
+    const ex = ev.x;
+    const avg = shares > 0 ? remaining / shares : 0;
+    const hasNominal = ex.NominalSold !== undefined && ex.NominalSold !== null && ex.NominalSold !== '';
+    const requested = hasNominal
+      ? Number(ex.NominalSold || 0)
+      : (Number(ex.PercentSold || 0) / 100) * capitalIn;
+    const effective = Math.min(Math.max(requested, 0), remaining);
+
+    if (avg > 0) {
+      realizedValue += effective * (Number(ex.ExitPrice || 0) / avg);
+      shares -= effective / avg;
+    }
+    remaining -= effective;
+    if (remaining < 1) {
+      remaining = 0;
+      shares = 0;
+    }
+    exitRows[ex.ExitID] = { nominal: effective, capitalInAtExit: capitalIn };
+  });
+
+  const allShares = entries.reduce((sum, e) => {
+    const p = Number(e.EntryPrice || 0);
+    return p > 0 ? sum + Number(e.Nominal || 0) / p : sum;
   }, 0);
-  const avgEntryPrice = totalShares > 0 ? totalNominalIn / totalShares : 0;
+  const avgEntryPrice = shares > 0 ? remaining / shares : allShares > 0 ? capitalIn / allShares : 0;
 
-  // Proses exit urut kronologis dan batasi tiap exit supaya nggak "jual" lebih dari
-  // sisa modal yang beneran ada saat itu. Ini jaga-jaga kalau ada data lama/rusak
-  // di mana exit full (TP/CL) kesimpen PercentSold: 100 walau sebelumnya udah ada
-  // partial exit duluan - tanpa ini, realizedValue bakal dobel-hitung modal yang
-  // sama dan growth jadi kelihatan untung padahal aslinya rugi.
-  const sortedExits = [...exits].sort((a, b) => new Date(a.ExitDate) - new Date(b.ExitDate));
+  return { capitalIn, remainingNominal: remaining, avgEntryPrice, realizedValue, exitRows };
+}
 
-  let remaining = 100;
-  const realizedValue = sortedExits.reduce((sum, ex) => {
-    const requestedPercent = Number(ex.PercentSold || 0);
-    const effectivePercent = Math.min(Math.max(requestedPercent, 0), remaining);
-    remaining -= effectivePercent;
+export function computePosition(journal) {
+  if ((journal.entries || []).length === 0) return null;
 
-    const portionValue = (effectivePercent / 100) * totalNominalIn;
-    const priceRatio = avgEntryPrice > 0 ? Number(ex.ExitPrice || 0) / avgEntryPrice : 0;
-    return sum + portionValue * priceRatio;
-  }, 0);
-
-  const remainingPercent = Math.max(0, remaining);
+  const { capitalIn, remainingNominal, avgEntryPrice, realizedValue } = replayPosition(journal);
 
   return {
     journalId: journal.JournalID,
     ticker: journal.Ticker,
     status: journal.Status,
-    totalNominalIn,
+    totalNominalIn: capitalIn,
     avgEntryPrice,
-    remainingPercent,
+    remainingNominal,
     realizedValue,
-    isOpen: remainingPercent > 0
+    isOpen: remainingNominal >= 1
   };
 }

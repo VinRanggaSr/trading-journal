@@ -26,8 +26,8 @@ export function useLivePositions(journals) {
 
   const rows = positions.map((p) => {
     // Modal yang masih "nyangkut" di posisi ini - berkurang seiring exit partial,
-    // dan jadi 0 begitu posisi ditutup penuh (remainingPercent = 0).
-    const modalRemaining = (p.remainingPercent / 100) * p.totalNominalIn;
+    // dan jadi 0 begitu posisi ditutup penuh (remainingNominal = 0).
+    const modalRemaining = p.remainingNominal;
     let currentValueRemaining = 0;
 
     if (p.isOpen) {
